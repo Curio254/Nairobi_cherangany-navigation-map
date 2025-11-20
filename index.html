@@ -1,1 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cherangany Forest Tree Nurseries Navigation Map</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+  body, html {margin:0; padding:0; height:100%; font-family: 'Poppins', sans-serif;}
+  #map {height: 100vh; width: 100%;}
+  .leaflet-popup-content {font-size: 14px;}
+  @media(max-width:600px){ #map{height:100vh;} }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- OpenRouteService JS -->
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
+
+<script>
+  // Initialize map centered roughly on Cherangany Forest
+  var map = L.map('map').setView([0.3, 35.4], 9);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // Load Forest Polygon
+  fetch('Cherengany_Fblock_WGS84.geojson')
+    .then(res => res.json())
+    .then(data => {
+      L.geoJSON(data, {
+        style: {color:'green', weight:2, fillOpacity:0.1}
+      }).addTo(map);
+    });
+
+  // Function to load nurseries
+  function loadNurseries(file, color){
+    fetch(file)
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          pointToLayer: function(feature, latlng){
+            return L.marker(latlng, {icon: L.icon({
+              iconUrl: 'https://cdn-icons-png.flaticon.com/512/252/252025.png',
+              iconSize: [25,25],
+              iconAnchor: [12,25]
+            })}).bindPopup("<b>"+(feature.properties.name||"Tree Nursery")+"</b>");
+          }
+        }).addTo(map);
+      });
+  }
+
+  loadNurseries('Elgeyo_Marakwet_County.geojson', 'blue');
+  loadNurseries('West_Pokot_County.geojson', 'orange');
+
+  // Optional: Routing from Nairobi (0.3476, 36.7073) to first nursery (example)
+  // Uncomment if you have OpenRouteService API key and want live routing
+  /*
+  var control = L.Routing.control({
+    waypoints: [
+      L.latLng(0.3476, 36.7073), // Nairobi
+      L.latLng(-0.5, 35.3) // Example destination, replace with a selected nursery
+    ],
+    router: L.Routing.openrouteservice('YOUR_API_KEY_HERE'),
+    routeWhileDragging: true
+  }).addTo(map);
+  */
+</script>
+
+</body>
+</html>
 
