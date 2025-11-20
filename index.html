@@ -7,62 +7,70 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
 <style>
-    html, body { height: 100%; margin: 0; padding: 0; }
-    #map { height: 100%; }
+  html, body { height: 100%; margin: 0; padding: 0; }
+  #map { height: 100%; }
 
-    /* Collapsible floating panel */
-    #routing-container {
-        position: fixed;
-        bottom: 10px;
-        left: 10px;
-        right: 10px;
-        max-height: 65%;
-        overflow: hidden;
-        background: rgba(255,255,255,0.95);
-        border-radius: 12px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-        transition: max-height 0.3s ease;
-        z-index: 1000;
-        font-family: sans-serif;
-    }
-    #routing-container.collapsed { max-height: 40px; }
-    #routing-panel { padding: 10px; }
-    #toggle-routing {
-        width: 100%;
-        background: #d495a5;
-        border: none;
-        color: white;
-        font-weight: 600;
-        padding: 10px;
-        border-radius: 12px 12px 0 0;
-        cursor: pointer;
-    }
-    #toggle-routing:hover { background: #c87c91; }
-    #controls { margin-top: 5px; display:flex; gap:5px; flex-wrap:wrap; }
-    #controls button { flex: 1; padding: 5px; border-radius:6px; border:none; background:#f1c0c0; cursor:pointer; }
-    #controls button:hover { background:#e5a2a2; }
+  /* Floating routing box */
+  #routing-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 280px;
+      background: rgba(255,255,255,0.95);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      font-family: sans-serif;
+      z-index: 1000;
+      overflow: hidden;
+      max-height: 400px;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      transform: translateY(100%);
+      opacity: 0;
+  }
+  #routing-container.visible {
+      transform: translateY(0);
+      opacity: 1;
+  }
+  #routing-header {
+      background: #d495a5;
+      color: white;
+      font-weight: 600;
+      padding: 10px;
+      cursor: pointer;
+      text-align: center;
+  }
+  #routing-panel { padding: 10px; }
+  #routing-panel button {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      border: none;
+      border-radius: 8px;
+      background: #f1c0c0;
+      cursor: pointer;
+      font-weight: 600;
+  }
+  #routing-panel button:hover { background: #e5a2a2; }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<div id="routing-container" class="collapsed">
-    <button id="toggle-routing">🗺️ Show / Hide Navigation</button>
-    <div id="routing-panel">
-        <div id="controls">
-            <button id="fastestBtn">Fastest Route</button>
-            <button id="shortestBtn">Shortest Route</button>
-            <button id="clearRouteBtn">Clear Route</button>
-        </div>
-    </div>
+<div id="routing-container">
+  <div id="routing-header">🗺️ Show / Hide Navigation</div>
+  <div id="routing-panel">
+      <button id="fastestBtn">Fastest Route</button>
+      <button id="shortestBtn">Shortest Route</button>
+      <button id="clearRouteBtn">Clear Route</button>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
-// Nairobi start point
+// Nairobi fixed start
 const NAIROBI_START = L.latLng(-1.28333, 36.8167);
 const nurseryWaypoints = [];
 
@@ -89,15 +97,12 @@ geojsonFiles.forEach(item => {
             L.geoJSON(data, {
                 style: item.style,
                 pointToLayer: function(feature, latlng){
-                    if(item.type === 'point'){
-                        nurseryWaypoints.push(latlng);
-                        return L.marker(latlng);
-                    }
+                    if(item.type==='point'){ nurseryWaypoints.push(latlng); return L.marker(latlng); }
                     return null;
                 },
                 onEachFeature: function(feature, layer){
-                    let popup = "<strong>" + item.name + "</strong>";
-                    if(feature.properties && feature.properties.name) popup += "<br>" + feature.properties.name;
+                    let popup = "<strong>"+item.name+"</strong>";
+                    if(feature.properties && feature.properties.name) popup += "<br>"+feature.properties.name;
                     layer.bindPopup(popup);
                 }
             }).addTo(map);
@@ -122,25 +127,22 @@ function createRoute(profile='fastest'){
         routeWhileDragging: false,
         show: true,
         language: 'en',
-        lineOptions: { styles: [{color:'#D495A5', weight:6, opacity:0.8}] }
+        lineOptions: { styles:[{color:'#D495A5', weight:6, opacity:0.8}] }
     }).addTo(map);
-
-    document.getElementById('routing-panel').appendChild(routingControl.getContainer());
     map.setZoom(7);
 }
 
-Promise.all(loadPromises).then(() => {
-    createRoute('fastest');
-});
+Promise.all(loadPromises).then(()=>{ createRoute('fastest'); });
 
-// Collapsible panel
-document.getElementById('toggle-routing').addEventListener('click', ()=>{
-    document.getElementById('routing-container').classList.toggle('collapsed');
+// Animate show/hide
+const routingContainer = document.getElementById('routing-container');
+document.getElementById('routing-header').addEventListener('click', ()=>{
+    routingContainer.classList.toggle('visible');
 });
 
 // Buttons
-document.getElementById('fastestBtn').addEventListener('click', ()=> createRoute('fastest'));
-document.getElementById('shortestBtn').addEventListener('click', ()=> createRoute('shortest'));
+document.getElementById('fastestBtn').addEventListener('click', ()=>createRoute('fastest'));
+document.getElementById('shortestBtn').addEventListener('click', ()=>createRoute('shortest'));
 document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
     if(routingControl) map.removeControl(routingControl);
     routingControl = null;
