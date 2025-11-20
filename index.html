@@ -4,32 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nairobi_cherangany-navigation-map</title>
-<meta name="description" content="Interactive navigation map from Nairobi to tree nurseries in Cherangany Forest Block, Elgeyo Marakwet, and West Pokot. Choose fastest or shortest route.">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
 <style>
     html, body { height: 100%; margin: 0; padding: 0; }
     #map { height: 100%; }
 
-    /* Collapsible Routing Panel */
+    /* Collapsible floating panel */
     #routing-container {
         position: fixed;
         bottom: 10px;
         left: 10px;
         right: 10px;
-        max-height: 60%;
+        max-height: 65%;
         overflow: hidden;
         background: rgba(255,255,255,0.95);
         border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 12px rgba(0,0,0,0.2);
         transition: max-height 0.3s ease;
         z-index: 1000;
+        font-family: sans-serif;
     }
-
     #routing-container.collapsed { max-height: 40px; }
-
     #routing-panel { padding: 10px; }
-
     #toggle-routing {
         width: 100%;
         background: #d495a5;
@@ -40,33 +37,37 @@
         border-radius: 12px 12px 0 0;
         cursor: pointer;
     }
-
     #toggle-routing:hover { background: #c87c91; }
+    #controls { margin-top: 5px; display:flex; gap:5px; flex-wrap:wrap; }
+    #controls button { flex: 1; padding: 5px; border-radius:6px; border:none; background:#f1c0c0; cursor:pointer; }
+    #controls button:hover { background:#e5a2a2; }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<!-- Collapsible Routing Panel -->
 <div id="routing-container" class="collapsed">
-    <button id="toggle-routing">🗺️ Show / Hide Directions</button>
-    <div id="routing-panel"></div>
+    <button id="toggle-routing">🗺️ Show / Hide Navigation</button>
+    <div id="routing-panel">
+        <div id="controls">
+            <button id="fastestBtn">Fastest Route</button>
+            <button id="shortestBtn">Shortest Route</button>
+            <button id="clearRouteBtn">Clear Route</button>
+        </div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
-// Global array to store nursery coordinates
-const nurseryWaypoints = [];
-// Nairobi starting point
+// Nairobi start point
 const NAIROBI_START = L.latLng(-1.28333, 36.8167);
+const nurseryWaypoints = [];
 
-// Initialize map centered roughly on Cherangany
+// Initialize map
 var map = L.map('map').setView([0.5, 35.5], 8);
-
-// Add OpenStreetMap tiles
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
@@ -83,64 +84,68 @@ const loadPromises = [];
 
 geojsonFiles.forEach(item => {
     const promise = fetch(item.file)
-        .then(res => {
-            if(!res.ok) throw new Error(`HTTP error! Status: ${res.status} for ${item.file}`);
-            return res.json();
-        })
+        .then(res => res.json())
         .then(data => {
             L.geoJSON(data, {
                 style: item.style,
                 pointToLayer: function(feature, latlng){
-                    if(item.type === 'point') {
+                    if(item.type === 'point'){
                         nurseryWaypoints.push(latlng);
                         return L.marker(latlng);
                     }
                     return null;
                 },
                 onEachFeature: function(feature, layer){
-                    let popupContent = "<strong>" + item.name + "</strong>";
-                    if(feature.properties && feature.properties.name){
-                        popupContent += "<br>" + feature.properties.name;
-                    }
-                    layer.bindPopup(popupContent);
+                    let popup = "<strong>" + item.name + "</strong>";
+                    if(feature.properties && feature.properties.name) popup += "<br>" + feature.properties.name;
+                    layer.bindPopup(popup);
                 }
             }).addTo(map);
-        })
-        .catch(err => console.error('Error loading ' + item.file, err));
-
+        });
     loadPromises.push(promise);
 });
 
-Promise.all(loadPromises).then(() => {
+let routingControl = null;
+
+function createRoute(profile='fastest'){
+    if(routingControl) map.removeControl(routingControl);
+
     const finalWaypoints = [
         L.Routing.waypoint(NAIROBI_START, 'Nairobi (Start)'),
         ...nurseryWaypoints,
-        L.Routing.waypoint(nurseryWaypoints[nurseryWaypoints.length-1], 'Final Nursery (End)')
+        L.Routing.waypoint(nurseryWaypoints[nurseryWaypoints.length-1], 'Final Nursery')
     ];
 
-    if(finalWaypoints.length >= 2){
-        const routingControl = L.Routing.control({
-            router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
-            waypoints: finalWaypoints,
-            routeWhileDragging: false,
-            show: true,
-            language: 'en',
-            lineOptions: { styles: [{color:'#D495A5', weight:6, opacity:0.8}] }
-        }).addTo(map);
+    routingControl = L.Routing.control({
+        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1', profile: profile }),
+        waypoints: finalWaypoints,
+        routeWhileDragging: false,
+        show: true,
+        language: 'en',
+        lineOptions: { styles: [{color:'#D495A5', weight:6, opacity:0.8}] }
+    }).addTo(map);
 
-        // Move routing control into collapsible panel
-        document.getElementById('routing-panel').appendChild(routingControl.getContainer());
-        map.setZoom(7);
-    } else {
-        console.warn("Not enough nursery locations loaded to calculate a route.");
-    }
+    document.getElementById('routing-panel').appendChild(routingControl.getContainer());
+    map.setZoom(7);
+}
+
+Promise.all(loadPromises).then(() => {
+    createRoute('fastest');
 });
 
-// Collapsible toggle
-document.getElementById('toggle-routing').addEventListener('click', () => {
+// Collapsible panel
+document.getElementById('toggle-routing').addEventListener('click', ()=>{
     document.getElementById('routing-container').classList.toggle('collapsed');
 });
-</script>
 
+// Buttons
+document.getElementById('fastestBtn').addEventListener('click', ()=> createRoute('fastest'));
+document.getElementById('shortestBtn').addEventListener('click', ()=> createRoute('shortest'));
+document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
+    if(routingControl) map.removeControl(routingControl);
+    routingControl = null;
+});
+
+</script>
 </body>
 </html>
