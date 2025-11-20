@@ -1,193 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Nairobi → Cherangany Forest Navigation Map</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nairobi_cherangany-navigation-map</title>
+<meta name="description" content="Interactive navigation map from Nairobi to tree nurseries in Cherangany Forest Block, Elgeyo Marakwet, and West Pokot. Choose fastest or shortest route.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+<style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    #map { height: 100%; }
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    /* Collapsible Routing Panel */
+    #routing-container {
+        position: fixed;
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        max-height: 60%;
+        overflow: hidden;
+        background: rgba(255,255,255,0.95);
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        transition: max-height 0.3s ease;
+        z-index: 1000;
+    }
 
-    <!-- Routing machine CSS -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"
-    />
+    #routing-container.collapsed { max-height: 40px; }
 
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: Arial, sans-serif;
-        }
+    #routing-panel { padding: 10px; }
 
-        #map {
-            width: 100%;
-            height: 100vh;
-        }
+    #toggle-routing {
+        width: 100%;
+        background: #d495a5;
+        border: none;
+        color: white;
+        font-weight: 600;
+        padding: 10px;
+        border-radius: 12px 12px 0 0;
+        cursor: pointer;
+    }
 
-        /* FLOATING NAVIGATION PANEL */
-        #nav-panel {
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            background: white;
-            padding: 12px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.25);
-            z-index: 9999;
-            width: 210px;
-        }
-
-        #nav-panel button {
-            width: 100%;
-            padding: 8px;
-            margin-bottom: 6px;
-            border: none;
-            background: #1976D2;
-            color: white;
-            font-size: 14px;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        #nav-panel button:hover {
-            background: #0F4FA8;
-        }
-
-        #nav-panel h3 {
-            font-size: 15px;
-            margin-top: 0;
-            margin-bottom: 8px;
-            text-align: center;
-        }
-    </style>
+    #toggle-routing:hover { background: #c87c91; }
+</style>
 </head>
 <body>
 
-<div id="nav-panel">
-    <h3>Navigation Options</h3>
-
-    <button onclick="routeAll()">Route: All Nurseries</button>
-    <button onclick="routeElgeyo()">Route: Elgeyo Only</button>
-    <button onclick="routeWest()">Route: West Pokot Only</button>
-    <button onclick="routeCherangany()">Route: Cherangany Forest</button>
-
-    <button onclick="setFastest()">Fastest Route</button>
-    <button onclick="setShortest()">Shortest Route</button>
-
-    <button onclick="clearRoute()" style="background:#B71C1C;">Clear Route</button>
-</div>
-
 <div id="map"></div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Collapsible Routing Panel -->
+<div id="routing-container" class="collapsed">
+    <button id="toggle-routing">🗺️ Show / Hide Directions</button>
+    <div id="routing-panel"></div>
+</div>
 
-<!-- Routing Machine -->
-<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
-// -----------------------------------------------
-// FIXED START POINT (NAIROBI – Kenyatta Avenue)
-// -----------------------------------------------
-const NAIROBI = L.latLng(-1.28333, 36.8167);
+// Global array to store nursery coordinates
+const nurseryWaypoints = [];
+// Nairobi starting point
+const NAIROBI_START = L.latLng(-1.28333, 36.8167);
 
-// -----------------------------------------------
-// MAP INITIALISATION
-// -----------------------------------------------
-var map = L.map('map').setView([0.8, 35.3], 8);
+// Initialize map centered roughly on Cherangany
+var map = L.map('map').setView([0.5, 35.5], 8);
 
+// Add OpenStreetMap tiles
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap'
+    attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Routing control (created later)
-let routingControl = null;
+// GeoJSON files
+var geojsonFiles = [
+    {file: 'cherangany_fblock_wgs84.json', style:{color:'green', weight:3, fillOpacity:0.2}, name:'Cherangany Forest Block', type:'polygon'},
+    {file: 'elgeyo_marakwet_county.json', style:{color:'blue', weight:2}, name:'Elgeyo Marakwet Nurseries', type:'point'},
+    {file: 'west_pokot_county.json', style:{color:'orange', weight:2}, name:'West Pokot Nurseries', type:'point'}
+];
 
-// -----------------------------------------------
-// STORAGE ARRAYS FOR GEOJSON POINTS
-// -----------------------------------------------
-let elgeyoPoints = [];
-let westPokotPoints = [];
-let cheranganyCentroid = null;
+const loadPromises = [];
 
-// -----------------------------------------------
-// LOAD GEOJSON FILES
-// -----------------------------------------------
-function loadGeoJSON(url, targetArray, isPolygon=false) {
-    fetch(url)
-        .then(r => r.json())
+geojsonFiles.forEach(item => {
+    const promise = fetch(item.file)
+        .then(res => {
+            if(!res.ok) throw new Error(`HTTP error! Status: ${res.status} for ${item.file}`);
+            return res.json();
+        })
         .then(data => {
             L.geoJSON(data, {
-                onEachFeature: function(feature, layer){
-                    if (!isPolygon) {
-                        targetArray.push(layer.getLatLng());
-                        layer.bindPopup("Nursery Location");
-                    } else {
-                        layer.bindPopup("Cherangany Forest Block");
-                        cheranganyCentroid = layer.getBounds().getCenter();
+                style: item.style,
+                pointToLayer: function(feature, latlng){
+                    if(item.type === 'point') {
+                        nurseryWaypoints.push(latlng);
+                        return L.marker(latlng);
                     }
+                    return null;
                 },
-                style: isPolygon ? { color:'green', weight:2, fillOpacity:0.15 } : undefined
+                onEachFeature: function(feature, layer){
+                    let popupContent = "<strong>" + item.name + "</strong>";
+                    if(feature.properties && feature.properties.name){
+                        popupContent += "<br>" + feature.properties.name;
+                    }
+                    layer.bindPopup(popupContent);
+                }
             }).addTo(map);
-        });
-}
+        })
+        .catch(err => console.error('Error loading ' + item.file, err));
 
-loadGeoJSON("elgeyo_marakwet_county.json", elgeyoPoints);
-loadGeoJSON("west_pokot_county.json", westPokotPoints);
-loadGeoJSON("cherengany_fblock_wgs84.json", [], true);
+    loadPromises.push(promise);
+});
 
-// -----------------------------------------------
-// ROUTING FUNCTIONS
-// -----------------------------------------------
-function createRoute(waypoints) {
-    if (routingControl) map.removeControl(routingControl);
+Promise.all(loadPromises).then(() => {
+    const finalWaypoints = [
+        L.Routing.waypoint(NAIROBI_START, 'Nairobi (Start)'),
+        ...nurseryWaypoints,
+        L.Routing.waypoint(nurseryWaypoints[nurseryWaypoints.length-1], 'Final Nursery (End)')
+    ];
 
-    routingControl = L.Routing.control({
-        waypoints: waypoints,
-        routeWhileDragging: false,
-        show: true,
-        router: L.Routing.osrmv1(),
-        lineOptions: { styles: [{color: '#D4126A', weight: 6}] }
-    }).addTo(map);
-}
+    if(finalWaypoints.length >= 2){
+        const routingControl = L.Routing.control({
+            router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
+            waypoints: finalWaypoints,
+            routeWhileDragging: false,
+            show: true,
+            language: 'en',
+            lineOptions: { styles: [{color:'#D495A5', weight:6, opacity:0.8}] }
+        }).addTo(map);
 
-function routeAll() {
-    createRoute([NAIROBI, ...elgeyoPoints, ...westPokotPoints]);
-}
+        // Move routing control into collapsible panel
+        document.getElementById('routing-panel').appendChild(routingControl.getContainer());
+        map.setZoom(7);
+    } else {
+        console.warn("Not enough nursery locations loaded to calculate a route.");
+    }
+});
 
-function routeElgeyo() {
-    createRoute([NAIROBI, ...elgeyoPoints]);
-}
-
-function routeWest() {
-    createRoute([NAIROBI, ...westPokotPoints]);
-}
-
-function routeCherangany() {
-    if (cheranganyCentroid)
-        createRoute([NAIROBI, cheranganyCentroid]);
-}
-
-function clearRoute() {
-    if (routingControl) map.removeControl(routingControl);
-}
-
-// -----------------------------------------------
-// FASTEST & SHORTEST
-// -----------------------------------------------
-function setFastest() {
-    if (!routingControl) return;
-    routingControl.setRouter(L.Routing.osrmv1({ profile: "driving" }));
-}
-
-function setShortest() {
-    if (!routingControl) return;
-    routingControl.setRouter(L.Routing.osrmv1({ profile: "driving", alternatives: true }));
-}
+// Collapsible toggle
+document.getElementById('toggle-routing').addEventListener('click', () => {
+    document.getElementById('routing-container').classList.toggle('collapsed');
+});
 </script>
 
 </body>
