@@ -6,20 +6,13 @@
 <title>Nairobi → Cherangany Forest Navigation Map</title>
 
 <!-- Leaflet CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+ integrity="sha256-sA+qjJ5rnqk3T7nT+n+8K6D/J0v7P49o2cMquE1X+z0=" crossorigin=""/>
 
 <style>
-  body, html {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    font-family: 'Poppins', sans-serif;
-  }
-  #map {
-    height: 100vh;
-    width: 100%;
-  }
+    body, html { margin: 0; padding: 0; height: 100%; }
+    #map { height: 100vh; width: 100%; }
+    .leaflet-control-layers-toggle { background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/layers.png); }
 </style>
 </head>
 <body>
@@ -27,53 +20,47 @@
 <div id="map"></div>
 
 <!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+ integrity="sha256-o6E0jStY6btq+yf3Z1pTjY2gXn2MmpnX+2BueGJ0fVY=" crossorigin=""></script>
 
 <script>
-  // Initialize map near Cherangany Forest
-  var map = L.map('map').setView([0.9, 35.5], 10);
+// Initialize map
+var map = L.map('map').setView([0.5, 35.5], 8); // Centered roughly on Cherangany
 
-  // Add OpenStreetMap tile layer
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+// Add OpenStreetMap base layer
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
 
-  // Load Cherangany Forest polygon
-  fetch('Cherengany_Fblock_WGS84.geojson')
-    .then(res => res.json())
-    .then(data => {
-      L.geoJSON(data, {
-        style: {
-          color: 'green',
-          weight: 2,
-          fillOpacity: 0.2
-        }
-      }).addTo(map);
-    });
+// GeoJSON filenames (all lowercase)
+var geojsonFiles = [
+    {file: 'cherangany_fblock_wgs84.json', style:{color:'green', weight:2}, name:'Cherangany Forest Block'},
+    {file: 'elgeyo_marakwet_county.json', style:{color:'blue', weight:2}, name:'Elgeyo Marakwet Nurseries'},
+    {file: 'west_pokot_county.json', style:{color:'orange', weight:2}, name:'West Pokot Nurseries'}
+];
 
-  // Load Elgeyo Marakwet nurseries
-  fetch('Elgeyo_Marakwet_County.geojson')
-    .then(res => res.json())
-    .then(data => {
-      L.geoJSON(data, {
-        pointToLayer: function(feature, latlng){
-          return L.marker(latlng)
-            .bindPopup("<b>" + (feature.properties.name || "Marakwet Nursery") + "</b>");
-        }
-      }).addTo(map);
-    });
+// Function to load GeoJSON and add to map
+geojsonFiles.forEach(function(item){
+    fetch(item.file)
+        .then(res => res.json())
+        .then(data => {
+            L.geoJSON(data, {
+                style: item.style,
+                onEachFeature: function(feature, layer) {
+                    var popupContent = "<strong>" + item.name + "</strong>";
+                    if(feature.properties && feature.properties.name){
+                        popupContent += "<br>" + feature.properties.name;
+                    }
+                    layer.bindPopup(popupContent);
+                }
+            }).addTo(map);
+        })
+        .catch(err => console.error('Error loading ' + item.file, err));
+});
 
-  // Load West Pokot nurseries
-  fetch('West_Pokot_County.geojson')
-    .then(res => res.json())
-    .then(data => {
-      L.geoJSON(data, {
-        pointToLayer: function(feature, latlng){
-          return L.marker(latlng)
-            .bindPopup("<b>" + (feature.properties.name || "West Pokot Nursery") + "</b>");
-        }
-      }).addTo(map);
-    });
+// Add basic markers for nurseries if points exist
+// Optional: you can also add custom icons here
 
 </script>
 
